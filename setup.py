@@ -24,7 +24,6 @@ setup(
         "flake8>=3.8.3",
         "black>=19.10b0",
         "ml-datasets@git+https://github.com/abkoesdw/ml-datasets.git@dev",
-        # "jupyterlab>=2.1.5",
     ],
     license="MIT License",
     classifiers=[
