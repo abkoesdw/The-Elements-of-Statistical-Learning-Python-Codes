@@ -23,6 +23,7 @@ setup(
         "tqdm>=4.47.0",
         "flake8>=3.8.3",
         "black>=19.10b0",
+        "scikit-learn>=0.23.1",
         "ml-datasets@git+https://github.com/abkoesdw/ml-datasets.git@dev",
     ],
     license="MIT License",
