@@ -207,12 +207,12 @@ class LSQR(LSOrthogonalization):
         return x @ self.beta_hat
 
 
-class BestSelection:
+class SubsetSelection:
     def __init__(self, *args, **kwargs):
         self.subsets = kwargs.get("subsets", None)
 
-    def _fit(self, feature_index):
-        if feature_index is not None:
+    def fit(self, feature_index):
+        if feature_index:
             x_temp = self.x[:, feature_index].reshape(-1, len(feature_index))
 
         else:
@@ -224,37 +224,170 @@ class BestSelection:
 
         return lsqr.RSS(x_temp, self.y)
 
-    def _process_subset(self):
+    def process_subset_best(self):
         result = dict()
         result["num_feat"] = []
         result["feat_subset"] = []
         result["RSS"] = []
-        for subset_size in range(len(self.subsets) + 1):
-            subset = list(combinations(self.subsets, subset_size))
 
+        for subset_size in range(len(self.subsets) + 1):
+            subset = combinations(self.subsets, subset_size)
+            subset = [list(i) for i in subset]
+            best_RSS = np.inf
             if any(subset):
                 for feature_index in tqdm(
                     subset,
                     total=len(subset),
-                    desc="processing subset: {}".format(subset_size),
+                    desc="processing Best subset: {}".format(subset_size),
                 ):
-                    result["RSS"].append(self._fit(feature_index))
+                    RSS_temp = self.fit(feature_index)
+
+                    result["RSS"].append(RSS_temp)
                     result["feat_subset"].append(feature_index)
                     result["num_feat"].append(subset_size)
             else:
 
-                result["RSS"].append(self._fit(None))
+                result["RSS"].append(self.fit(None))
                 result["feat_subset"].append("intercept")
                 result["num_feat"].append(0)
 
-        return pd.DataFrame(result)
+        result = pd.DataFrame(result)
+        result_best = result[
+            result.groupby("num_feat")["RSS"].transform(min) == result["RSS"]
+        ]
 
-    def run(self, x, y):
+        return result, result_best.reset_index(drop=True)
+
+    def process_subset_forward(self):
+        result = dict()
+        result["num_feat"] = []
+        result["feat_subset"] = []
+        result["RSS"] = []
+
+        subsets_remaining = list(self.subsets)
+
+        subsets_keep = []
+        for subset_size in range(len(self.subsets) + 1):
+            subset = combinations(subsets_remaining, 1)
+            subset = [list(i) for i in subset]
+            best_RSS = np.inf
+
+            if subset_size != 0:
+                for feature_index in tqdm(
+                    subset,
+                    total=len(subset),
+                    desc="processing Forward subset: {}".format(subset_size),
+                ):
+                    idx_temp = subsets_keep + feature_index
+                    RSS_temp = self.fit(idx_temp)
+
+                    if RSS_temp < best_RSS:
+                        best_RSS = RSS_temp
+                        best_feature = feature_index[0]
+
+                subsets_keep.append(best_feature)
+                subsets_remaining.remove(best_feature)
+                result["RSS"].append(best_RSS)
+
+                subsets_keep_copy = np.sort(subsets_keep.copy())
+                result["feat_subset"].append(subsets_keep_copy)
+                result["num_feat"].append(subset_size)
+
+            else:
+                result["RSS"].append(self.fit(None))
+                result["feat_subset"].append("intercept")
+                result["num_feat"].append(0)
+
+        result = pd.DataFrame(result)
+        return result.reset_index(drop=True)
+
+    def process_subset_backward(self):
+        result = dict()
+        result["num_feat"] = []
+        result["feat_subset"] = []
+        result["RSS"] = []
+
+        best_feature = list(self.subsets)
+
+        for subset_size in range(len(self.subsets) + 1):
+            subset = combinations(best_feature, len(list(self.subsets)) - subset_size)
+            subset = [list(i) for i in subset]
+            best_RSS = np.inf
+
+            if len(list(self.subsets)) - subset_size != 0:
+                for feature_index in tqdm(
+                    subset,
+                    total=len(subset),
+                    desc="processing Backward subset: {}".format(subset_size),
+                ):
+                    RSS_temp = self.fit(list(feature_index))
+
+                    if RSS_temp < best_RSS:
+                        best_RSS = RSS_temp
+                        best_feature = feature_index
+
+                result["RSS"].append(best_RSS)
+                result["feat_subset"].append(best_feature)
+                result["num_feat"].append(len(best_feature))
+
+            else:
+                result["RSS"].append(self.fit(None))
+                result["feat_subset"].append("intercept")
+                result["num_feat"].append(0)
+
+        result = pd.DataFrame(result).sort_values(by=["num_feat"], ascending=False)
+        return result.reset_index(drop=True)
+
+    def run(self, x, y, mode="best"):
         if self.subsets is not None:
             self.x = x
             self.y = y
-            return self._process_subset()
+
+            if mode == "best":
+                return self.process_subset_best()
+
+            elif mode == "forward":
+                return self.process_subset_forward()
+
+            elif mode == "backward":
+                return self.process_subset_backward()
+
+            else:
+                print("Incorrect mode selection, available: best, forward, backward")
 
         else:
             print("Subsets need to be defined!")
             sys.exit()
+
+    def get_statistics(self, result):
+        result = self.get_mallow_cp(result)
+        result = self.get_aic(result)
+        result = self.get_bic(result)
+        return result
+
+    def get_mallow_cp(self, result):
+        m, p = self.x.shape
+        RSS_full = min(result["RSS"])
+        sigma_hat_squared = (1 / (m - p)) * min(result["RSS"])
+        result["Mallow's Cp"] = (1 / m) * (
+            result["RSS"] + 2 * result["num_feat"] * sigma_hat_squared
+        )
+        return result
+
+    def get_aic(self, result):
+        m, p = self.x.shape
+        RSS_full = min(result["RSS"])
+        sigma_hat_squared = (1 / (m - p - 1)) * min(result["RSS"])
+        result["AIC"] = (1 / (m * sigma_hat_squared)) * (
+            result["RSS"] + 2 * result["num_feat"] * sigma_hat_squared
+        )
+        return result
+
+    def get_bic(self, result):
+        m, p = self.x.shape
+        RSS_full = min(result["RSS"])
+        sigma_hat_squared = (1 / (m - p - 1)) * min(result["RSS"])
+        result["BIC"] = (1 / (m * sigma_hat_squared)) * (
+            result["RSS"] + np.log(m) * result["num_feat"] * sigma_hat_squared
+        )
+        return result
