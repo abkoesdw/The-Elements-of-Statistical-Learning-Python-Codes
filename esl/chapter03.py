@@ -391,3 +391,30 @@ class SubsetSelection:
             result["RSS"] + np.log(m) * result["num_feat"] * sigma_hat_squared
         )
         return result
+
+
+def kfold(x, y, nfold=10, seed=2):
+    num_data = len(y)
+    index = np.arange(num_data)
+    np.random.seed(seed)
+    np.random.shuffle(index)
+
+    num_data = len(y)
+    avg = len(index) / float(nfold)
+    last = 0.0
+
+    x_dict = dict()
+    y_dict = dict()
+
+    i = 0
+    while last < num_data:
+        index_val = index[int(last) : int(last + avg)]
+        index_train = np.array([j for j in range(num_data) if j not in index_val])
+
+        y_dict[9 - i] = {"train": y[index_train], "val": y[index_val]}
+        x_dict[9 - i] = {"train": x[index_train, :], "val": x[index_val, :]}
+
+        last += avg
+        i += 1
+
+    return x_dict, y_dict
