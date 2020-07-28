@@ -418,3 +418,28 @@ def kfold(x, y, nfold=10, seed=2):
         i += 1
 
     return x_dict, y_dict
+
+
+class RidgeRegression:
+    def fit(self, x, y, lambda_):
+        # calculate beta_hat using SVD
+        self.u, self.d, self.vT = np.linalg.svd(x, full_matrices=False)
+
+        # divide the equation into 3 parts because it's too long otherwise
+        self.diag_mat = np.diag(self.d)
+        self.inv_diag_lambda = np.linalg.inv(
+            self.diag_mat ** 2 + lambda_ * np.eye(x.shape[1])
+        )
+        self.ut_y = self.u.T @ y
+        self.beta_hat = self.vT.T @ self.inv_diag_lambda @ self.diag_mat @ self.ut_y
+
+    def predict(self, x):
+        return x @ self.beta_hat
+
+    def RSS(self, x, y):
+        y_hat = x @ self.beta_hat
+        return (y - y_hat).T @ (y - y_hat)
+
+    def MRSS(self, x, y):
+        y_hat = x @ self.beta_hat
+        return ((y - y_hat).T @ (y - y_hat)) / len(y)
