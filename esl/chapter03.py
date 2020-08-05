@@ -411,8 +411,8 @@ def kfold(x, y, nfold=10, seed=2):
         index_val = index[int(last) : int(last + avg)]
         index_train = np.array([j for j in range(num_data) if j not in index_val])
 
-        y_dict[9 - i] = {"train": y[index_train], "val": y[index_val]}
-        x_dict[9 - i] = {"train": x[index_train, :], "val": x[index_val, :]}
+        y_dict[i] = {"train": y[index_train], "val": y[index_val]}
+        x_dict[i] = {"train": x[index_train, :], "val": x[index_val, :]}
 
         last += avg
         i += 1
