@@ -443,3 +443,63 @@ class RidgeRegression:
     def MRSS(self, x, y):
         y_hat = x @ self.beta_hat
         return ((y - y_hat).T @ (y - y_hat)) / len(y)
+
+
+class Lasso:
+    def fit(self, X, y):
+        n, p = X.shape
+        beta = np.zeros(p)
+
+        r = y.copy()
+        corr = X.T @ r
+        best_feat = np.argmax(np.abs(corr))
+        A = [best_feat]
+        beta_path = np.zeros((p, 1))
+
+        while True:
+            d = np.zeros(p)
+            d[A] = np.linalg.inv(X[:, A].T @ X[:, A]) @ X[:, A].T @ r
+            alpha = 1.0
+            for j in range(p):
+                if j not in A and beta[j] == 0:
+                    alpha_temp = dict()
+                    alpha_temp["+"] = (corr[j] - corr[best_feat]) / (
+                        X[:, j].T @ X[:, A] @ d[A] - X[:, best_feat].T @ X[:, A] @ d[A]
+                    )
+                    alpha_temp["-"] = (corr[j] + corr[best_feat]) / (
+                        X[:, j].T @ X[:, A] @ d[A] + X[:, best_feat].T @ X[:, A] @ d[A]
+                    )
+
+                    for key in alpha_temp.keys():
+                        if alpha_temp[key] <= 0.0:
+                            alpha_temp[key] = np.inf
+
+                        if alpha_temp[key] <= alpha:
+                            alpha = alpha_temp[key]
+                            best_feat_temp = j
+
+                elif beta[j] != 0 and j in A:
+                    if d[j] != 0:
+                        alpha_temp = -beta[j] / d[j]
+                        if alpha_temp <= alpha and alpha_temp >= 0.0:
+                            alpha = alpha_temp
+                            best_feat_temp = -j
+
+            beta = beta + alpha * d
+            beta_path = np.concatenate((beta_path, beta.reshape(-1, 1)), axis=1)
+
+            if alpha == 1.0:
+                break
+
+            if best_feat_temp < 0:
+                A = [k for k in A if k != np.abs(best_feat_temp)]
+                best_feat = A[0]
+
+            else:
+                A.append(best_feat_temp)
+                best_feat = best_feat_temp
+
+            r = r - alpha * (X @ d)
+            corr = X.T @ r
+
+        return A, beta_path
