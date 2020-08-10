@@ -210,6 +210,7 @@ class LSQR(LSOrthogonalization):
 class SubsetSelection:
     def __init__(self, *args, **kwargs):
         self.subsets = kwargs.get("subsets", None)
+        self.beta_path = []
 
     def fit(self, feature_index):
         if feature_index:
@@ -222,6 +223,7 @@ class SubsetSelection:
         lsqr = LeastSquaresRegression()
         lsqr.fit(x_temp, self.y)
 
+        self.beta_path.append(lsqr.beta_hat)
         return lsqr.RSS(x_temp, self.y)
 
     def process_subset_best(self):
@@ -233,7 +235,7 @@ class SubsetSelection:
         for subset_size in range(len(self.subsets) + 1):
             subset = combinations(self.subsets, subset_size)
             subset = [list(i) for i in subset]
-            best_RSS = np.inf
+
             if any(subset):
                 for feature_index in tqdm(
                     subset,
@@ -367,7 +369,6 @@ class SubsetSelection:
 
     def get_mallow_cp(self, result):
         m, p = self.x.shape
-        RSS_full = min(result["RSS"])
         sigma_hat_squared = (1 / (m - p)) * min(result["RSS"])
         result["Mallow's Cp"] = (1 / m) * (
             result["RSS"] + 2 * result["num_feat"] * sigma_hat_squared
@@ -376,7 +377,6 @@ class SubsetSelection:
 
     def get_aic(self, result):
         m, p = self.x.shape
-        RSS_full = min(result["RSS"])
         sigma_hat_squared = (1 / (m - p - 1)) * min(result["RSS"])
         result["AIC"] = (1 / (m * sigma_hat_squared)) * (
             result["RSS"] + 2 * result["num_feat"] * sigma_hat_squared
@@ -385,7 +385,6 @@ class SubsetSelection:
 
     def get_bic(self, result):
         m, p = self.x.shape
-        RSS_full = min(result["RSS"])
         sigma_hat_squared = (1 / (m - p - 1)) * min(result["RSS"])
         result["BIC"] = (1 / (m * sigma_hat_squared)) * (
             result["RSS"] + np.log(m) * result["num_feat"] * sigma_hat_squared
@@ -503,3 +502,67 @@ class Lasso:
             corr = X.T @ r
 
         return A, beta_path
+
+
+class PrincipalComponentRegression:
+    def __init__(self, **kwargs):
+        self.num_components = kwargs.get("num_components", 1)
+
+    def fit(self, x, y):
+        xTx = x.T @ x
+        v, d2, vt = np.linalg.svd(xTx)
+
+        beta = np.zeros((x.shape[1], x.shape[1]))
+        for m in range(self.num_components):
+            z_m = x @ v[:, m]
+            theta_m = np.inner(z_m, y) / d2[m]
+            beta[:, m] = theta_m * v[:, m]
+
+        self.beta_hat = np.sum(beta, axis=1)
+
+    def predict(self, x):
+        return x @ self.beta_hat
+
+    def error(self, x, y):
+        y_hat = self.predict(x)
+        error = y_hat - y
+
+        return error.T @ error, (error.T @ error) / len(error)
+
+
+class PartialLeastSquares:
+    def __init__(self, **kwargs):
+        self.num_direction = kwargs.get("num_direction", 1)
+
+    def fit(self, x, y):
+        x_prev = x.copy()
+        y_hat_prev = np.ones_like(y) * np.mean(y)
+        z = np.zeros_like(x)
+        phi = np.zeros((x.shape[1], x.shape[1]))
+        theta = np.zeros(x.shape[1])
+        for m in range(1, self.num_direction + 1):
+            for j in range(x.shape[1]):
+                phi[m - 1, j] = x_prev[:, j].T @ y
+                z[:, m - 1] += phi[m - 1, j] * x_prev[:, j]
+
+            theta[m - 1] = (z[:, m - 1].T @ y) / (z[:, m - 1].T @ z[:, m - 1])
+
+            y_hat_prev = y_hat_prev + theta[m - 1] * z[:, m - 1]
+
+            for j in range(x.shape[1]):
+                x_prev[:, j] = (
+                    x_prev[:, j]
+                    - ((z[:, m - 1].T @ x_prev[:, j]) / (z[:, m - 1].T @ z[:, m - 1]))
+                    * z[:, m - 1]
+                )
+
+        self.beta_hat = np.linalg.inv(x.T @ x) @ x.T @ y_hat_prev
+
+    def predict(self, x):
+        return x @ self.beta_hat
+
+    def error(self, x, y):
+        y_hat = self.predict(x)
+        error = y_hat - y
+
+        return error.T @ error, (error.T @ error) / len(error)
