@@ -24,4 +24,4 @@ I have also included some mathematical derivations and explanations of some of t
 
 There are two sections (3.4.3 and 3.6) about the discussions about some of the methods, which are supported with visualizations.
 
-I strive to reproduce the tables and plots to be as close/identical as possible with the ones in the book, including the styling.
+I strive to reproduce the tables and plots to be as close/identical as possible with the ones in the book, including the the formatting and styling.
