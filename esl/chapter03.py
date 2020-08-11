@@ -566,3 +566,21 @@ class PartialLeastSquares:
         error = y_hat - y
 
         return error.T @ error, (error.T @ error) / len(error)
+
+
+class IncForwStageRegression:
+    def __init__(self, **kwargs):
+        self.num_iter = kwargs.get("num_iter", 10)
+        self.step_size = kwargs.get("step_size", 0.01)
+
+    def fit(self, x, y):
+        r = y.copy()
+        self.beta_path = np.zeros((self.num_iter, x.shape[1]))
+        beta_hat = np.zeros(x.shape[1])
+        for i in range(self.num_iter):
+            corr = x.T @ r
+            best_predictor = np.argmax(np.abs(corr))
+            delta = self.step_size * np.sign(x[:, best_predictor].T @ r)
+            beta_hat[best_predictor] += delta
+            self.beta_path[i, :] = beta_hat
+            r -= delta * x[:, best_predictor]
