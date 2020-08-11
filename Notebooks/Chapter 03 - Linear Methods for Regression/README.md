@@ -20,7 +20,7 @@ In this chapter, I have implemented some linear regression methods from scratch:
    * Related Path Algorithms:
       * Incremental Forward Stagewise Regression
 
-I have also included some mathematical derivations and explanations of some of the algorithms.
+I have also included some mathematical derivations, proofs and explanations of some of the algorithms.
 
 There are two sections (3.4.3 and 3.6) about the discussions about some of the methods, which are supported with visualizations.
 
